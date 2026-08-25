@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+# Vasuki / vash - Interactive Reconnaissance Shell (REPL)
+
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+# Source configuration and helper modules
+# shellcheck source=config.sh
+source "${SCRIPT_DIR}/config.sh"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+# shellcheck source=nmap.sh
+source "${SCRIPT_DIR}/nmap.sh"
+# shellcheck source=ffuf.sh
+source "${SCRIPT_DIR}/ffuf.sh"
+# shellcheck source=curl.sh
+source "${SCRIPT_DIR}/curl.sh"
+
+CURRENT_TARGET=""
+
+cleanup() {
+    echo -e "\n${COLOR_YELLOW}Exiting vash shell. Goodbye!${COLOR_RESET}"
+    exit 0
+}
+
+# Trapping SIGINT (Ctrl+C) to prevent shell exit during scan interruption
+trap_sigint() {
+    echo -e "\n${COLOR_YELLOW}[!] Interrupted. Returning to vash prompt...${COLOR_RESET}"
+}
+
+trap cleanup SIGTERM
+trap trap_sigint SIGINT
+
+set_target_interactive() {
+    local input_target="$1"
+
+    # Check if target is specified as a history index number (e.g. target 1)
+    if [[ "${input_target}" =~ ^[0-9]+$ ]] && [[ -f "${TARGET_HISTORY_FILE}" ]]; then
+        local line_num="${input_target}"
+        local selected_from_hist
+        selected_from_hist="$(sed -n "${line_num}p" "${TARGET_HISTORY_FILE}" 2>/dev/null || true)"
+        if [[ -n "${selected_from_hist}" ]]; then
+            CURRENT_TARGET="${selected_from_hist}"
+            export_target_environment "${CURRENT_TARGET}"
+            print_success "Selected target from history [${line_num}]: ${CURRENT_TARGET}"
+            return 0
+        else
+            print_error "Target history item [${line_num}] does not exist."
+            return 1
+        fi
+    fi
+
+    if validate_target "${input_target}"; then
+        CURRENT_TARGET="$(normalize_target "${input_target}")"
+        export_target_environment "${CURRENT_TARGET}"
+        save_target_history "${CURRENT_TARGET}"
+        print_success "Target set to: ${CURRENT_TARGET}"
+        return 0
+    fi
+    return 1
+}
+
+prompt_target_input() {
+    local input_target=""
+    while true; do
+        echo -en "${COLOR_CYAN}Enter Target (e.g., example.com, 10.10.10.10, http://example.com): ${COLOR_RESET}"
+        read -r input_target
+        input_target="$(echo "${input_target}" | awk '{$1=$1;print}')"
+
+        if [[ -z "${input_target}" ]]; then
+            print_warning "No target entered. Proceeding in no-target mode."
+            break
+        fi
+
+        if set_target_interactive "${input_target}"; then
+            break
+        fi
+    done
+}
+
+vash_repl() {
+    mkdir -p "${VASUKI_CONFIG_DIR}"
+    touch "${COMMAND_HISTORY_FILE}"
+
+    # Load history if available
+    history -r "${COMMAND_HISTORY_FILE}" 2>/dev/null || true
+
+    local input_line=""
+    local cmd=""
+    local args=""
+
+    # Disable set -e for the interactive REPL loop so non-zero return codes never kill the shell
+    set +e
+
+    while true; do
+        # Build prompt string displaying active target and PWD (formatted like bash/zsh with ~)
+        local pwd_str
+        pwd_str="$(get_prompt_pwd)"
+
+        local prompt_str
+        if [[ -n "${CURRENT_TARGET}" ]]; then
+            prompt_str="${COLOR_CYAN}${COLOR_BOLD}vash(${COLOR_GREEN}${CURRENT_TARGET}${COLOR_CYAN}):${COLOR_BLUE}${pwd_str}${COLOR_CYAN} > ${COLOR_RESET}"
+        else
+            prompt_str="${COLOR_CYAN}${COLOR_BOLD}vash(${COLOR_YELLOW}no-target${COLOR_CYAN}):${COLOR_BLUE}${pwd_str}${COLOR_CYAN} > ${COLOR_RESET}"
+        fi
+
+        # Readline enabled prompt
+        if ! read -e -p "$(echo -e "${prompt_str}")" input_line; then
+            cleanup
+        fi
+
+        input_line="$(echo "${input_line}" | awk '{$1=$1;print}')"
+
+        if [[ -z "${input_line}" ]]; then
+            continue
+        fi
+
+        # Append to history
+        history -s "${input_line}" 2>/dev/null || true
+        echo "${input_line}" >> "${COMMAND_HISTORY_FILE}" 2>/dev/null || true
+
+        cmd="${input_line%% *}"
+        args="${input_line#* }"
+        [[ "${cmd}" == "${args}" ]] && args=""
+
+        case "${cmd,,}" in
+            cd)
+                if [[ -z "${args}" ]]; then
+                    builtin cd "${HOME}" || true
+                else
+                    local target_dir="${args}"
+                    eval target_dir="${target_dir}"
+                    builtin cd "${target_dir}" 2>/dev/null || print_error "cd: ${args}: No such file or directory"
+                fi
+                ;;
+            target|set)
+                if [[ -z "${args}" ]] || [[ "${args,,}" == "target" ]]; then
+                    prompt_target_input || true
+                elif [[ "${cmd,,}" == "set" ]] && [[ "${args,,}" =~ ^target ]]; then
+                    local target_val="${args#target }"
+                    set_target_interactive "${target_val}" || true
+                else
+                    set_target_interactive "${args}" || true
+                fi
+                ;;
+            targets)
+                show_target_history || true
+                ;;
+            show)
+                if [[ "${args,,}" =~ ^target ]]; then
+                    if [[ -n "${CURRENT_TARGET}" ]]; then
+                        echo -e "\n${COLOR_BOLD}Current Target Details:${COLOR_RESET}"
+                        echo -e "  TARGET: ${COLOR_GREEN}${TARGET}${COLOR_RESET}"
+                        echo -e "  URL:    ${COLOR_GREEN}${URL}${COLOR_RESET}"
+                        echo -e "  HOST:   ${COLOR_GREEN}${HOST}${COLOR_RESET}"
+                        echo -e "  IP:     ${COLOR_GREEN}${IP}${COLOR_RESET}"
+                        echo -e "  PWD:    ${COLOR_BLUE}${PWD}${COLOR_RESET}\n"
+                    else
+                        print_warning "No active target set. Type 'target <URL>' to set one."
+                    fi
+                elif [[ "${args,,}" =~ ^options|^modules ]]; then
+                    display_main_options || true
+                else
+                    echo -e "\n${COLOR_BOLD}Current Status:${COLOR_RESET}"
+                    echo -e "  TARGET: ${COLOR_GREEN}${TARGET:-None}${COLOR_RESET}"
+                    echo -e "  HOST:   ${COLOR_GREEN}${HOST:-None}${COLOR_RESET}"
+                    echo -e "  PWD:    ${COLOR_BLUE}${PWD}${COLOR_RESET}\n"
+                    display_main_options || true
+                fi
+                ;;
+            nmap|1)
+                run_nmap "${CURRENT_TARGET}" "${args}" || true
+                ;;
+            ffuf|2)
+                run_ffuf "${CURRENT_TARGET}" "${args}" || true
+                ;;
+            curl|3)
+                run_curl "${CURRENT_TARGET}" "${args}" || true
+                ;;
+            history)
+                if [[ "${args,,}" =~ ^target ]]; then
+                    show_target_history || true
+                else
+                    show_command_history || true
+                fi
+                ;;
+            help|\?)
+                show_help || true
+                ;;
+            clear|cls)
+                clear || true
+                banner || true
+                ;;
+            exit|quit|back)
+                cleanup
+                ;;
+            *)
+                # Native Linux Command Passthrough
+                export_target_environment "${CURRENT_TARGET}"
+                eval "${input_line}" || true
+                ;;
+        esac
+    done
+}
+
+main() {
+    check_dependencies
+    clear || true
+    banner
+
+    # Check if target argument was passed directly (e.g. vasuki 10.10.10.10 or vash 10.10.10.10)
+    if [[ $# -gt 0 ]]; then
+        set_target_interactive "$1" || true
+    fi
+
+    vash_repl
+}
+
+main "$@"
