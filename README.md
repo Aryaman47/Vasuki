@@ -76,6 +76,28 @@ Targets passed to `vash` (e.g. `example.com`, `10.10.10.10`, `https://example.co
   - `HOST`: Extracted hostname/IP (e.g. `example.com`)
   - `IP`: Alias of `$HOST`
 
+  ---
+  ![Vasuki set target](assets/images/setTarget.png)
+  ---
+  ## Command Reference Table
+
+  | Command | Arguments | Description |
+  | :--- | :--- | :--- |
+  | `target` | `<URL\|IP>` or `<num>` | Sets target explicitly, or selects item `<num>` from target history log. |
+  | `targets` | *None* | Displays numbered log of previously set targets. |
+  | `show` | `target` \| `options` | Displays active target variables (`$TARGET`, `$HOST`, `$URL`, `$IP`, `$PWD`) or main module options. |
+  | `nmap` | `[1-11]` \| `?` | Opens Nmap profiles menu, executes profile `[1-11]` directly, or displays profile help (`nmap ?`). |
+  | `ffuf` | `[wordlist_path]` \| `?` | Opens Wordlist picker, executes fuzzing with specified file path, or displays FFUF help (`ffuf ?`). |
+  | `curl` | `[1-4]` \| `[flags]` \| `?` | Opens Curl menu, executes specific request profile, or displays Curl help (`curl ?`). |
+  | `cd` | `[dir]` | Changes working directory in-process and updates prompt path representation (`~`). |
+  | `history` | `[commands\|targets]` | Displays command history log or target history log. |
+  | `clear` / `cls` | *None* | Clears terminal screen and re-renders vash header. |
+  | `help` / `?` | *None* | Renders built-in command reference table. |
+  | `exit` / `quit` | *None* | Terminates vash interactive shell session. |
+
+  ---
+  ![Vasuki Help Menu](assets/images/help.png)
+  ---
 ### 2. Module Specifications
 
 #### Nmap Module (`nmap.sh`)
@@ -96,10 +118,18 @@ Executes scan profiles against `$HOST`. Profiles are categorized into three inte
   10. UDP Top Ports Scan (`nmap -sU --top-ports 100 <target>`)
   11. Vulnerability Assessment (`nmap --script vuln <target>`)
 
+  ---
+  ![Vasuki nmap](assets/images/nmap.png)
+  ---
+
 #### FFUF Module (`ffuf.sh`)
 - Appends `/FUZZ` to the active URL if no `FUZZ` placeholder is present.
 - Resolves wordlists via `select_wordlist()`, direct argument pathing (`ffuf /path/to/wordlist.txt`), or system SecLists discovery.
 - Appends verified user paths to `~/.config/vasuki/saved_wordlists.txt` for future quick selection.
+
+  ---
+  ![Vasuki ffuf](assets/images/ffuf.png)
+  ---
 
 #### Curl Module (`curl.sh`)
 Renders interactive HTTP request options (`GET`, `-i` Include Headers, `-I` HEAD, `-v` Verbose) or passes custom curl arguments directly (`curl -i`).
@@ -118,26 +148,6 @@ All persistent state is stored in standard user configuration paths under `~/.co
 ```
 
 ---
-
-## Command Reference Table
-
-| Command | Arguments | Description |
-| :--- | :--- | :--- |
-| `target` | `<URL\|IP>` or `<num>` | Sets target explicitly, or selects item `<num>` from target history log. |
-| `targets` | *None* | Displays numbered log of previously set targets. |
-| `show` | `target` \| `options` | Displays active target variables (`$TARGET`, `$HOST`, `$URL`, `$IP`, `$PWD`) or main module options. |
-| `nmap` | `[1-11]` \| `?` | Opens Nmap profiles menu, executes profile `[1-11]` directly, or displays profile help (`nmap ?`). |
-| `ffuf` | `[wordlist_path]` \| `?` | Opens Wordlist picker, executes fuzzing with specified file path, or displays FFUF help (`ffuf ?`). |
-| `curl` | `[1-4]` \| `[flags]` \| `?` | Opens Curl menu, executes specific request profile, or displays Curl help (`curl ?`). |
-| `cd` | `[dir]` | Changes working directory in-process and updates prompt path representation (`~`). |
-| `history` | `[commands\|targets]` | Displays command history log or target history log. |
-| `clear` / `cls` | *None* | Clears terminal screen and re-renders vash header. |
-| `help` / `?` | *None* | Renders built-in command reference table. |
-| `exit` / `quit` | *None* | Terminates vash interactive shell session. |
-
-
----
-
 ## Comprehensive Source Code Analysis & Logic Explanation
 
 This section provides a granular, line-by-line and logic-block breakdown of every Bash script in the Vasuki (`vash`) repository.
