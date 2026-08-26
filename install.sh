@@ -37,10 +37,12 @@ fi
 
 # Create persistent user config directory & history files
 VASUKI_CONFIG_DIR="${HOME}/.config/vasuki"
-mkdir -p "${VASUKI_CONFIG_DIR}"
+mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
+chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
 touch "${VASUKI_CONFIG_DIR}/saved_wordlists.txt"
 touch "${VASUKI_CONFIG_DIR}/target_history.txt"
 touch "${VASUKI_CONFIG_DIR}/command_history.txt"
+chmod 600 "${VASUKI_CONFIG_DIR}"/*.txt 2>/dev/null || true
 
 # Determine target directories (root vs non-root)
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then

@@ -80,8 +80,10 @@ prompt_target_input() {
 }
 
 vash_repl() {
-    mkdir -p "${VASUKI_CONFIG_DIR}"
+    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
+    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
     touch "${COMMAND_HISTORY_FILE}"
+    chmod 600 "${COMMAND_HISTORY_FILE}" 2>/dev/null || true
 
     # Load history if available
     history -r "${COMMAND_HISTORY_FILE}" 2>/dev/null || true
@@ -130,7 +132,9 @@ vash_repl() {
                     builtin cd "${HOME}" || true
                 else
                     local target_dir="${args}"
-                    eval target_dir="${target_dir}"
+                    if [[ "${target_dir}" == "~"* ]]; then
+                        target_dir="${HOME}${target_dir#\~}"
+                    fi
                     builtin cd "${target_dir}" 2>/dev/null || print_error "cd: ${args}: No such file or directory"
                 fi
                 ;;

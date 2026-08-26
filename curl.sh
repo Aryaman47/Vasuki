@@ -51,9 +51,13 @@ run_curl() {
                 curl -v "${target}" || print_error "Curl execution failed."
                 ;;
             *)
+                local -a arg_arr=()
+                if [[ -n "${arg}" ]]; then
+                    read -r -a arg_arr <<< "${arg}"
+                fi
                 print_info "Executing: curl ${arg} ${target}"
                 echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl ${arg} "${target}" || print_error "Curl execution failed."
+                curl "${arg_arr[@]}" "${target}" || print_error "Curl execution failed."
                 ;;
         esac
         return 0

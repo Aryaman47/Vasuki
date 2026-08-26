@@ -44,7 +44,9 @@ run_ffuf() {
     ffuf_url="$(_prepare_ffuf_url "${target}")"
 
     if [[ -n "${custom_wordlist}" ]]; then
-        eval custom_wordlist="${custom_wordlist}"
+        if [[ "${custom_wordlist}" == "~"* ]]; then
+            custom_wordlist="${HOME}${custom_wordlist#\~}"
+        fi
         if [[ -f "${custom_wordlist}" ]]; then
             SELECTED_WORDLIST="${custom_wordlist}"
             save_wordlist_path "${custom_wordlist}"

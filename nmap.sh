@@ -84,9 +84,13 @@ run_nmap() {
                 ;;
         esac
 
+        local -a flags_arr=()
+        if [[ -n "${flags}" ]]; then
+            read -r -a flags_arr <<< "${flags}"
+        fi
         print_info "Executing: nmap ${flags} ${nmap_target}"
         echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-        if ! nmap ${flags} "${nmap_target}"; then
+        if ! nmap "${flags_arr[@]}" "${nmap_target}"; then
             print_error "Nmap scan execution failed or was interrupted."
         else
             print_success "Nmap scan completed successfully."
@@ -128,10 +132,14 @@ run_nmap() {
                 ;;
         esac
 
+        local -a flags_arr=()
+        if [[ -n "${flags}" ]]; then
+            read -r -a flags_arr <<< "${flags}"
+        fi
         print_info "Executing: nmap ${flags} ${nmap_target}"
         echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
 
-        if ! nmap ${flags} "${nmap_target}"; then
+        if ! nmap "${flags_arr[@]}" "${nmap_target}"; then
             print_error "Nmap scan execution failed or was interrupted."
         else
             print_success "Nmap scan completed successfully."

@@ -82,6 +82,7 @@ extract_host() {
     local host="${raw_target#*://}"
     host="${host%%/*}"
     host="${host%%:*}"
+    host="$(echo "${host}" | tr -cd 'a-zA-Z0-9.-')"
     echo "${host}"
 }
 
@@ -99,8 +100,10 @@ export_target_environment() {
 
 save_target_history() {
     local target="$1"
-    mkdir -p "${VASUKI_CONFIG_DIR}"
+    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
+    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
     touch "${TARGET_HISTORY_FILE}"
+    chmod 600 "${TARGET_HISTORY_FILE}" 2>/dev/null || true
 
     if ! grep -Fxq "${target}" "${TARGET_HISTORY_FILE}" 2>/dev/null; then
         echo "${target}" >> "${TARGET_HISTORY_FILE}"
@@ -108,8 +111,10 @@ save_target_history() {
 }
 
 show_target_history() {
-    mkdir -p "${VASUKI_CONFIG_DIR}"
+    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
+    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
     touch "${TARGET_HISTORY_FILE}"
+    chmod 600 "${TARGET_HISTORY_FILE}" 2>/dev/null || true
 
     echo -e "\n${COLOR_BOLD}=== Saved Target History ===${COLOR_RESET}"
     if [[ ! -s "${TARGET_HISTORY_FILE}" ]]; then
@@ -128,8 +133,10 @@ show_target_history() {
 }
 
 show_command_history() {
-    mkdir -p "${VASUKI_CONFIG_DIR}"
+    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
+    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
     touch "${COMMAND_HISTORY_FILE}"
+    chmod 600 "${COMMAND_HISTORY_FILE}" 2>/dev/null || true
 
     echo -e "\n${COLOR_BOLD}=== Recent Command History ===${COLOR_RESET}"
     if [[ ! -s "${COMMAND_HISTORY_FILE}" ]]; then
@@ -196,8 +203,10 @@ display_main_options() {
 
 save_wordlist_path() {
     local path="$1"
-    mkdir -p "${VASUKI_CONFIG_DIR}"
+    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
+    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
     touch "${SAVED_WORDLISTS_FILE}"
+    chmod 600 "${SAVED_WORDLISTS_FILE}" 2>/dev/null || true
 
     if ! grep -Fxq "${path}" "${SAVED_WORDLISTS_FILE}" 2>/dev/null; then
         echo "${path}" >> "${SAVED_WORDLISTS_FILE}"
@@ -207,8 +216,10 @@ save_wordlist_path() {
 
 select_wordlist() {
     SELECTED_WORDLIST=""
-    mkdir -p "${VASUKI_CONFIG_DIR}"
+    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
+    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
     touch "${SAVED_WORDLISTS_FILE}"
+    chmod 600 "${SAVED_WORDLISTS_FILE}" 2>/dev/null || true
 
     while true; do
         echo -e "\n${COLOR_BOLD}--- Wordlist Selection ---${COLOR_RESET}"
@@ -251,7 +262,9 @@ select_wordlist() {
 
         if [[ "${input_choice}" =~ ^~ || "${input_choice}" =~ ^/ || "${input_choice}" =~ \. || "${input_choice}" =~ / ]]; then
             local direct_path="${input_choice}"
-            eval direct_path="${direct_path}"
+            if [[ "${direct_path}" == "~"* ]]; then
+                direct_path="${HOME}${direct_path#\~}"
+            fi
 
             if [[ -f "${direct_path}" ]]; then
                 save_wordlist_path "${direct_path}"
@@ -301,7 +314,9 @@ select_wordlist() {
                     continue
                 fi
 
-                eval new_path="${new_path}"
+                if [[ "${new_path}" == "~"* ]]; then
+                    new_path="${HOME}${new_path#\~}"
+                fi
 
                 if [[ -f "${new_path}" ]]; then
                     save_wordlist_path "${new_path}"
