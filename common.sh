@@ -18,7 +18,11 @@ EOF
 
 pause() {
     echo -en "${COLOR_YELLOW}\nPress [Enter] key to continue...${COLOR_RESET}"
-    read -r
+    local status=0
+    read -r || status=$?
+    if [[ ${status} -gt 128 ]]; then
+        echo ""
+    fi
 }
 
 print_error() {
@@ -82,7 +86,6 @@ extract_host() {
     local host="${raw_target#*://}"
     host="${host%%/*}"
     host="${host%%:*}"
-    host="$(echo "${host}" | tr -cd 'a-zA-Z0-9.-')"
     echo "${host}"
 }
 
@@ -100,10 +103,8 @@ export_target_environment() {
 
 save_target_history() {
     local target="$1"
-    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
-    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
+    mkdir -p "${VASUKI_CONFIG_DIR}"
     touch "${TARGET_HISTORY_FILE}"
-    chmod 600 "${TARGET_HISTORY_FILE}" 2>/dev/null || true
 
     if ! grep -Fxq "${target}" "${TARGET_HISTORY_FILE}" 2>/dev/null; then
         echo "${target}" >> "${TARGET_HISTORY_FILE}"
@@ -111,10 +112,8 @@ save_target_history() {
 }
 
 show_target_history() {
-    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
-    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
+    mkdir -p "${VASUKI_CONFIG_DIR}"
     touch "${TARGET_HISTORY_FILE}"
-    chmod 600 "${TARGET_HISTORY_FILE}" 2>/dev/null || true
 
     echo -e "\n${COLOR_BOLD}=== Saved Target History ===${COLOR_RESET}"
     if [[ ! -s "${TARGET_HISTORY_FILE}" ]]; then
@@ -133,10 +132,8 @@ show_target_history() {
 }
 
 show_command_history() {
-    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
-    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
+    mkdir -p "${VASUKI_CONFIG_DIR}"
     touch "${COMMAND_HISTORY_FILE}"
-    chmod 600 "${COMMAND_HISTORY_FILE}" 2>/dev/null || true
 
     echo -e "\n${COLOR_BOLD}=== Recent Command History ===${COLOR_RESET}"
     if [[ ! -s "${COMMAND_HISTORY_FILE}" ]]; then
@@ -160,6 +157,8 @@ show_help() {
     printf "  %-25s %s\n" "ffuf ?" "Display FFUF fuzzing module reference"
     printf "  %-25s %s\n" "curl [option_num]" "Run Curl toolkit module or specific request"
     printf "  %-25s %s\n" "curl ?" "Display Curl toolkit module reference"
+    printf "  %-25s %s\n" "hashcat [file] [prof]" "Run Hashcat offline password cracking module"
+    printf "  %-25s %s\n" "hashcat ?" "Display Hashcat attack profiles reference"
     printf "  %-25s %s\n" "cd [dir]" "Change working directory"
     printf "  %-25s %s\n" "history [commands|targets]" "Display command or target history"
     printf "  %-25s %s\n" "clear / cls" "Clear terminal screen and re-render header"
@@ -173,7 +172,7 @@ show_help() {
 
 check_dependencies() {
     local missing=()
-    local deps=("nmap" "ffuf" "curl")
+    local deps=("nmap" "ffuf" "curl" "hashcat")
 
     for dep in "${deps[@]}"; do
         if ! command -v "${dep}" >/dev/null 2>&1; then
@@ -193,6 +192,7 @@ display_main_options() {
     echo "  - nmap         : Run Nmap Port Scanning profiles (type 'nmap ?' for help)"
     echo "  - ffuf         : Run FFUF Directory/File Fuzzing (type 'ffuf ?' for help)"
     echo "  - curl         : Run Curl HTTP Toolkit (type 'curl ?' for help)"
+    echo "  - hashcat      : Run Hashcat Password Cracking (type 'hashcat ?' for help)"
     echo "  - target <URL> : Set/Change Target"
     echo "  - targets      : View Target History"
     echo "  - history      : View Command History"
@@ -203,10 +203,8 @@ display_main_options() {
 
 save_wordlist_path() {
     local path="$1"
-    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
-    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
+    mkdir -p "${VASUKI_CONFIG_DIR}"
     touch "${SAVED_WORDLISTS_FILE}"
-    chmod 600 "${SAVED_WORDLISTS_FILE}" 2>/dev/null || true
 
     if ! grep -Fxq "${path}" "${SAVED_WORDLISTS_FILE}" 2>/dev/null; then
         echo "${path}" >> "${SAVED_WORDLISTS_FILE}"
@@ -216,10 +214,8 @@ save_wordlist_path() {
 
 select_wordlist() {
     SELECTED_WORDLIST=""
-    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
-    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
+    mkdir -p "${VASUKI_CONFIG_DIR}"
     touch "${SAVED_WORDLISTS_FILE}"
-    chmod 600 "${SAVED_WORDLISTS_FILE}" 2>/dev/null || true
 
     while true; do
         echo -e "\n${COLOR_BOLD}--- Wordlist Selection ---${COLOR_RESET}"
@@ -251,7 +247,14 @@ select_wordlist() {
 
         echo -en "\n${COLOR_CYAN}Select Wordlist Option [1-${seclists_option}] (or type path / 'back'): ${COLOR_RESET}"
 
-        read -r input_choice
+        local read_status=0
+        read -r input_choice || read_status=$?
+
+        if [[ ${read_status} -gt 128 ]]; then
+            echo ""
+            return 1
+        fi
+
         input_choice="$(echo "${input_choice}" | awk '{$1=$1;print}')"
         local lower_choice="${input_choice,,}"
 
@@ -262,9 +265,7 @@ select_wordlist() {
 
         if [[ "${input_choice}" =~ ^~ || "${input_choice}" =~ ^/ || "${input_choice}" =~ \. || "${input_choice}" =~ / ]]; then
             local direct_path="${input_choice}"
-            if [[ "${direct_path}" == "~"* ]]; then
-                direct_path="${HOME}${direct_path#\~}"
-            fi
+            eval direct_path="${direct_path}"
 
             if [[ -f "${direct_path}" ]]; then
                 save_wordlist_path "${direct_path}"
@@ -300,7 +301,14 @@ select_wordlist() {
         elif [[ "${choice}" -eq "${enter_new_option}" ]]; then
             while true; do
                 echo -en "${COLOR_CYAN}Enter wordlist path (or type 'back' to return to Wordlist Selection): ${COLOR_RESET}"
-                read -r new_path
+                local sub_read_status=0
+                read -r new_path || sub_read_status=$?
+
+                if [[ ${sub_read_status} -gt 128 ]]; then
+                    echo ""
+                    return 1
+                fi
+
                 new_path="$(echo "${new_path}" | awk '{$1=$1;print}')"
                 local lower_new_path="${new_path,,}"
 
@@ -314,9 +322,7 @@ select_wordlist() {
                     continue
                 fi
 
-                if [[ "${new_path}" == "~"* ]]; then
-                    new_path="${HOME}${new_path#\~}"
-                fi
+                eval new_path="${new_path}"
 
                 if [[ -f "${new_path}" ]]; then
                     save_wordlist_path "${new_path}"

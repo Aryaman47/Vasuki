@@ -22,7 +22,7 @@ fi
 print_info "Starting vash (Vasuki Shell) installation..."
 
 # Check required dependencies
-deps=("nmap" "ffuf" "curl")
+deps=("nmap" "ffuf" "curl" "hashcat")
 missing=()
 for dep in "${deps[@]}"; do
     if ! command -v "${dep}" >/dev/null 2>&1; then
@@ -37,12 +37,10 @@ fi
 
 # Create persistent user config directory & history files
 VASUKI_CONFIG_DIR="${HOME}/.config/vasuki"
-mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
-chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
+mkdir -p "${VASUKI_CONFIG_DIR}"
 touch "${VASUKI_CONFIG_DIR}/saved_wordlists.txt"
 touch "${VASUKI_CONFIG_DIR}/target_history.txt"
 touch "${VASUKI_CONFIG_DIR}/command_history.txt"
-chmod 600 "${VASUKI_CONFIG_DIR}"/*.txt 2>/dev/null || true
 
 # Determine target directories (root vs non-root)
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
@@ -61,7 +59,7 @@ cp -r "${SCRIPT_DIR}/"* "${SHARE_DIR}/" 2>/dev/null || true
 
 # Set executable permissions
 chmod +x "${SHARE_DIR}/Vasuki"
-chmod +x "${SHARE_DIR}/config.sh" "${SHARE_DIR}/common.sh" "${SHARE_DIR}/nmap.sh" "${SHARE_DIR}/ffuf.sh" "${SHARE_DIR}/curl.sh" "${SHARE_DIR}/seclists.sh"
+chmod +x "${SHARE_DIR}/config.sh" "${SHARE_DIR}/common.sh" "${SHARE_DIR}/nmap.sh" "${SHARE_DIR}/ffuf.sh" "${SHARE_DIR}/curl.sh" "${SHARE_DIR}/hashcat.sh" "${SHARE_DIR}/seclists.sh"
 chmod +x "${SHARE_DIR}/install.sh" "${SHARE_DIR}/uninstall.sh" 2>/dev/null || true
 
 # Symlink executables: vash and vasuki

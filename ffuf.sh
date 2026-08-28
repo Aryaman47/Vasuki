@@ -44,9 +44,7 @@ run_ffuf() {
     ffuf_url="$(_prepare_ffuf_url "${target}")"
 
     if [[ -n "${custom_wordlist}" ]]; then
-        if [[ "${custom_wordlist}" == "~"* ]]; then
-            custom_wordlist="${HOME}${custom_wordlist#\~}"
-        fi
+        eval custom_wordlist="${custom_wordlist}"
         if [[ -f "${custom_wordlist}" ]]; then
             SELECTED_WORDLIST="${custom_wordlist}"
             save_wordlist_path "${custom_wordlist}"
@@ -70,11 +68,17 @@ run_ffuf() {
     print_info "Command:    ffuf -u ${ffuf_url} -w ${SELECTED_WORDLIST}"
     echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
 
-    if ! ffuf -u "${ffuf_url}" -w "${SELECTED_WORDLIST}"; then
-        print_error "FFUF execution failed or interrupted."
+    local status=0
+    ffuf -u "${ffuf_url}" -w "${SELECTED_WORDLIST}" || status=$?
+
+    if [[ ${status} -eq 130 || ${status} -gt 128 ]]; then
+        echo ""
+        return 0
+    elif [[ ${status} -ne 0 ]]; then
+        print_error "FFUF scan execution failed."
+        pause
     else
         print_success "FFUF scan completed successfully."
+        pause
     fi
-
-    pause
 }

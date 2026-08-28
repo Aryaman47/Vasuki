@@ -16,6 +16,8 @@ source "${SCRIPT_DIR}/nmap.sh"
 source "${SCRIPT_DIR}/ffuf.sh"
 # shellcheck source=curl.sh
 source "${SCRIPT_DIR}/curl.sh"
+# shellcheck source=hashcat.sh
+source "${SCRIPT_DIR}/hashcat.sh"
 
 CURRENT_TARGET=""
 
@@ -24,9 +26,9 @@ cleanup() {
     exit 0
 }
 
-# Trapping SIGINT (Ctrl+C) to prevent shell exit during scan interruption
+# Fast SIGINT (Ctrl+C) handler matching standard shell behavior
 trap_sigint() {
-    echo -e "\n${COLOR_YELLOW}[!] Interrupted. Returning to vash prompt...${COLOR_RESET}"
+    echo ""
 }
 
 trap cleanup SIGTERM
@@ -34,7 +36,7 @@ trap trap_sigint SIGINT
 
 set_target_interactive() {
     local input_target="$1"
-
+    
     # Check if target is specified as a history index number (e.g. target 1)
     if [[ "${input_target}" =~ ^[0-9]+$ ]] && [[ -f "${TARGET_HISTORY_FILE}" ]]; then
         local line_num="${input_target}"
@@ -65,9 +67,9 @@ prompt_target_input() {
     local input_target=""
     while true; do
         echo -en "${COLOR_CYAN}Enter Target (e.g., example.com, 10.10.10.10, http://example.com): ${COLOR_RESET}"
-        read -r input_target
+        read -r input_target || return 0
         input_target="$(echo "${input_target}" | awk '{$1=$1;print}')"
-
+        
         if [[ -z "${input_target}" ]]; then
             print_warning "No target entered. Proceeding in no-target mode."
             break
@@ -80,10 +82,8 @@ prompt_target_input() {
 }
 
 vash_repl() {
-    mkdir -p -m 700 "${VASUKI_CONFIG_DIR}"
-    chmod 700 "${VASUKI_CONFIG_DIR}" 2>/dev/null || true
+    mkdir -p "${VASUKI_CONFIG_DIR}"
     touch "${COMMAND_HISTORY_FILE}"
-    chmod 600 "${COMMAND_HISTORY_FILE}" 2>/dev/null || true
 
     # Load history if available
     history -r "${COMMAND_HISTORY_FILE}" 2>/dev/null || true
@@ -107,8 +107,16 @@ vash_repl() {
             prompt_str="${COLOR_CYAN}${COLOR_BOLD}vash(${COLOR_YELLOW}no-target${COLOR_CYAN}):${COLOR_BLUE}${pwd_str}${COLOR_CYAN} > ${COLOR_RESET}"
         fi
 
-        # Readline enabled prompt
-        if ! read -e -p "$(echo -e "${prompt_str}")" input_line; then
+        # Readline enabled prompt with instant SIGINT (Ctrl+C) vs EOF (Ctrl+D) handling
+        local read_status=0
+        read -e -p "$(echo -e "${prompt_str}")" input_line || read_status=$?
+
+        # If interrupted by signal (SIGINT 130 or status > 128), reset line & prompt instantly
+        if [[ ${read_status} -gt 128 ]]; then
+            echo ""
+            continue
+        elif [[ ${read_status} -ne 0 ]]; then
+            # EOF (Ctrl+D) pressed
             cleanup
         fi
 
@@ -132,9 +140,7 @@ vash_repl() {
                     builtin cd "${HOME}" || true
                 else
                     local target_dir="${args}"
-                    if [[ "${target_dir}" == "~"* ]]; then
-                        target_dir="${HOME}${target_dir#\~}"
-                    fi
+                    eval target_dir="${target_dir}"
                     builtin cd "${target_dir}" 2>/dev/null || print_error "cd: ${args}: No such file or directory"
                 fi
                 ;;
@@ -181,6 +187,9 @@ vash_repl() {
                 ;;
             curl|3)
                 run_curl "${CURRENT_TARGET}" "${args}" || true
+                ;;
+            hashcat|4)
+                run_hashcat ${args} || true
                 ;;
             history)
                 if [[ "${args,,}" =~ ^target ]]; then

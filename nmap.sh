@@ -84,14 +84,18 @@ run_nmap() {
                 ;;
         esac
 
-        local -a flags_arr=()
-        if [[ -n "${flags}" ]]; then
-            read -r -a flags_arr <<< "${flags}"
-        fi
         print_info "Executing: nmap ${flags} ${nmap_target}"
         echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-        if ! nmap "${flags_arr[@]}" "${nmap_target}"; then
-            print_error "Nmap scan execution failed or was interrupted."
+        
+        local status=0
+        nmap ${flags} "${nmap_target}" || status=$?
+        
+        if [[ ${status} -eq 130 || ${status} -gt 128 ]]; then
+            # Instant return on Ctrl+C without delay
+            echo ""
+            return 0
+        elif [[ ${status} -ne 0 ]]; then
+            print_error "Nmap scan execution failed."
         else
             print_success "Nmap scan completed successfully."
         fi
@@ -105,7 +109,14 @@ run_nmap() {
         echo -e "  0. Back to vash Shell (or type 'back')\n"
         echo -en "${COLOR_CYAN}Select Nmap Scan Option [1-11 / type 'back']: ${COLOR_RESET}"
 
-        read -r choice
+        local read_status=0
+        read -r choice || read_status=$?
+
+        if [[ ${read_status} -gt 128 ]]; then
+            echo ""
+            break
+        fi
+
         choice="$(echo "${choice}" | awk '{$1=$1;print}')"
         local lower_choice="${choice,,}"
 
@@ -132,19 +143,21 @@ run_nmap() {
                 ;;
         esac
 
-        local -a flags_arr=()
-        if [[ -n "${flags}" ]]; then
-            read -r -a flags_arr <<< "${flags}"
-        fi
         print_info "Executing: nmap ${flags} ${nmap_target}"
         echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
 
-        if ! nmap "${flags_arr[@]}" "${nmap_target}"; then
-            print_error "Nmap scan execution failed or was interrupted."
+        local status=0
+        nmap ${flags} "${nmap_target}" || status=$?
+
+        if [[ ${status} -eq 130 || ${status} -gt 128 ]]; then
+            echo ""
+            break
+        elif [[ ${status} -ne 0 ]]; then
+            print_error "Nmap scan execution failed."
+            pause
         else
             print_success "Nmap scan completed successfully."
+            pause
         fi
-
-        pause
     done
 }

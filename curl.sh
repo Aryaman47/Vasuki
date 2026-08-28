@@ -33,31 +33,27 @@ run_curl() {
             1|get)
                 print_info "Executing: curl ${target}"
                 echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl "${target}" || print_error "Curl execution failed."
+                curl "${target}" || true
                 ;;
             2|-i|headers|head_inc)
                 print_info "Executing: curl -i ${target}"
                 echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl -i "${target}" || print_error "Curl execution failed."
+                curl -i "${target}" || true
                 ;;
             3|-I|head)
                 print_info "Executing: curl -I ${target}"
                 echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl -I "${target}" || print_error "Curl execution failed."
+                curl -I "${target}" || true
                 ;;
             4|-v|verbose)
                 print_info "Executing: curl -v ${target}"
                 echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl -v "${target}" || print_error "Curl execution failed."
+                curl -v "${target}" || true
                 ;;
             *)
-                local -a arg_arr=()
-                if [[ -n "${arg}" ]]; then
-                    read -r -a arg_arr <<< "${arg}"
-                fi
                 print_info "Executing: curl ${arg} ${target}"
                 echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl "${arg_arr[@]}" "${target}" || print_error "Curl execution failed."
+                curl ${arg} "${target}" || true
                 ;;
         esac
         return 0
@@ -69,35 +65,23 @@ run_curl() {
         echo "0. Back to vash Shell (or type 'back')"
         echo -en "${COLOR_CYAN}Select option [1-4 / type 'back']: ${COLOR_RESET}"
 
-        read -r choice
+        local read_status=0
+        read -r choice || read_status=$?
+
+        if [[ ${read_status} -gt 128 ]]; then
+            echo ""
+            break
+        fi
+
         choice="$(echo "${choice}" | awk '{$1=$1;print}')"
         local lower_choice="${choice,,}"
 
+        local curl_cmd=""
         case "${lower_choice}" in
-            1)
-                print_info "Executing: curl ${target}"
-                echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl "${target}" || print_error "Curl execution failed."
-                pause
-                ;;
-            2)
-                print_info "Executing: curl -i ${target}"
-                echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl -i "${target}" || print_error "Curl execution failed."
-                pause
-                ;;
-            3)
-                print_info "Executing: curl -I ${target}"
-                echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl -I "${target}" || print_error "Curl execution failed."
-                pause
-                ;;
-            4)
-                print_info "Executing: curl -v ${target}"
-                echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
-                curl -v "${target}" || print_error "Curl execution failed."
-                pause
-                ;;
+            1) curl_cmd="curl ${target}" ;;
+            2) curl_cmd="curl -i ${target}" ;;
+            3) curl_cmd="curl -I ${target}" ;;
+            4) curl_cmd="curl -v ${target}" ;;
             0|5|b|back)
                 print_info "Navigating back to vash shell..."
                 break
@@ -105,7 +89,24 @@ run_curl() {
             *)
                 print_error "Invalid selection. Please choose 1, 2, 3, 4, or type 'back'."
                 pause
+                continue
                 ;;
         esac
+
+        print_info "Executing: ${curl_cmd}"
+        echo -e "${COLOR_BOLD}---------------------------------------------${COLOR_RESET}"
+
+        local status=0
+        ${curl_cmd} || status=$?
+
+        if [[ ${status} -eq 130 || ${status} -gt 128 ]]; then
+            echo ""
+            break
+        elif [[ ${status} -ne 0 ]]; then
+            print_error "Curl execution failed."
+            pause
+        else
+            pause
+        fi
     done
 }
