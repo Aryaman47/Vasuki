@@ -1,0 +1,14 @@
+# Set default behavior to auto LF normalization
+* text=auto eol=lf
+
+# Explicitly enforce LF on all shell scripts and executables
+*.sh text eol=lf
+Vasuki text eol=lf
+*.md text eol=lf
+
+# Declare binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
