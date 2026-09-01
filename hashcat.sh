@@ -45,6 +45,26 @@ _get_hashcat_title() {
     esac
 }
 
+display_cracked_results() {
+    local mode="$1"
+    local hash_file="$2"
+    local raw_output
+
+    raw_output="$(hashcat -m "${mode}" "${hash_file}" --show 2>/dev/null || true)"
+    raw_output="$(echo "${raw_output}" | grep -v '^[[:space:]]*$' || true)"
+
+    if [[ -n "${raw_output}" ]]; then
+        echo -e "\n${COLOR_GREEN}${COLOR_BOLD}============================================= ${COLOR_RESET}"
+        echo -e "${COLOR_GREEN}${COLOR_BOLD}   [+] CRACKED CREDENTIALS FOUND (${hash_file})   ${COLOR_RESET}"
+        echo -e "${COLOR_GREEN}${COLOR_BOLD}============================================= ${COLOR_RESET}"
+        echo -e "${COLOR_CYAN}${raw_output}${COLOR_RESET}"
+        echo -e "${COLOR_GREEN}${COLOR_BOLD}============================================= ${COLOR_RESET}\n"
+        return 0
+    else
+        return 1
+    fi
+}
+
 show_hashcat_help() {
     local target_file="${1:-<hash_file>}"
     echo -e "\n${COLOR_BOLD}=== Hashcat Module Attack Profiles Reference ===${COLOR_RESET}\n"
@@ -81,8 +101,9 @@ show_hashcat_help() {
     echo -e " 12. PDF 1.4 - 1.6 (Acrobat 5 - 8)"
     echo -e "     ${COLOR_CYAN}hashcat -a 0 -m 10500 ${target_file} <wordlist>${COLOR_RESET}\n"
 
-    echo -e "${COLOR_BOLD}Usage:${COLOR_RESET} hashcat [profile_num|hash_file] [profile_num] [wordlist_path]"
+    echo -e "${COLOR_BOLD}Usage:${COLOR_RESET} hashcat [profile_num|hash_file] [profile_num|show] [wordlist_path]"
     echo -e "${COLOR_BOLD}Examples:${COLOR_RESET}"
+    echo -e "  - ${COLOR_CYAN}hashcat show hashes.txt${COLOR_RESET}                        : Instantly display previously cracked hashes"
     echo -e "  - ${COLOR_CYAN}hashcat hashes.txt 1${COLOR_RESET}                          : Crack hashes.txt using Profile 1 (MD5) & Wordlist picker"
     echo -e "  - ${COLOR_CYAN}hashcat hashes.txt 5 /usr/share/wordlists/...${COLOR_RESET} : Crack hashes.txt using Profile 5 (NTLM) & specified wordlist"
     echo -e "  - ${COLOR_CYAN}hashcat 1 hashes.txt${COLOR_RESET}                          : Crack hashes.txt using Profile 1 (MD5)"
@@ -103,20 +124,32 @@ run_hashcat() {
     local hash_file=""
     local profile_num=""
     local custom_wordlist=""
+    local is_show_only=false
 
-    # Parsing arguments smartly
-    if [[ -n "${arg1}" ]]; then
-        eval expanded_arg1="${arg1}"
-        if [[ -f "${expanded_arg1}" ]]; then
-            hash_file="${expanded_arg1}"
-            profile_num="${arg2:-1}"
-            custom_wordlist="${arg3:-}"
-        elif [[ "${arg1}" =~ ^[0-9]+$ || "${arg1,,}" =~ ^(md5|sha1|sha256|sha512|ntlm|linux|bcrypt|wpa|kerberos|zip|rar|pdf)$ ]]; then
-            profile_num="${arg1}"
-            if [[ -n "${arg2}" ]]; then
-                eval hash_file="${arg2}"
+    # Handle 'show' or 'potfile' sub-command syntax
+    if [[ "${arg1,,}" == "show" || "${arg1,,}" == "potfile" ]]; then
+        is_show_only=true
+        hash_file="${arg2:-}"
+        profile_num="${arg3:-1}"
+    elif [[ "${arg2,,}" == "show" || "${arg2,,}" == "potfile" ]]; then
+        is_show_only=true
+        hash_file="${arg1:-}"
+        profile_num="1"
+    else
+        # Standard parsing
+        if [[ -n "${arg1}" ]]; then
+            eval expanded_arg1="${arg1}"
+            if [[ -f "${expanded_arg1}" ]]; then
+                hash_file="${expanded_arg1}"
+                profile_num="${arg2:-1}"
+                custom_wordlist="${arg3:-}"
+            elif [[ "${arg1}" =~ ^[0-9]+$ || "${arg1,,}" =~ ^(md5|sha1|sha256|sha512|ntlm|linux|bcrypt|wpa|kerberos|zip|rar|pdf)$ ]]; then
+                profile_num="${arg1}"
+                if [[ -n "${arg2}" ]]; then
+                    eval hash_file="${arg2}"
+                fi
+                custom_wordlist="${arg3:-}"
             fi
-            custom_wordlist="${arg3:-}"
         fi
     fi
 
@@ -180,6 +213,29 @@ run_hashcat() {
     local title
     title="$(_get_hashcat_title "${profile_num}")"
 
+    # Direct 'show' request handling
+    if [[ "${is_show_only}" == "true" ]]; then
+        print_info "Querying Hashcat potfile for cracked credentials in '${hash_file}' (${title})..."
+        if ! display_cracked_results "${mode}" "${hash_file}"; then
+            print_info "No cracked entries found in potfile for '${hash_file}' (Mode ${mode})."
+        fi
+        pause
+        return 0
+    fi
+
+    # Auto-check if all hashes in file are ALREADY cracked in potfile!
+    print_info "Checking potfile for previously cracked entries..."
+    if display_cracked_results "${mode}" "${hash_file}"; then
+        print_success "All or some hashes in '${hash_file}' were previously cracked!"
+        echo -en "${COLOR_CYAN}Do you still want to run Hashcat with a wordlist? [y/N]: ${COLOR_RESET}"
+        local run_again=""
+        read -r run_again || true
+        if [[ ! "${run_again,,}" =~ ^y ]]; then
+            pause
+            return 0
+        fi
+    fi
+
     # Wordlist Selection Logic
     if [[ -n "${custom_wordlist}" ]]; then
         eval custom_wordlist="${custom_wordlist}"
@@ -214,11 +270,11 @@ run_hashcat() {
     if [[ ${status} -eq 130 || ${status} -gt 128 ]]; then
         echo ""
         return 0
-    elif [[ ${status} -ne 0 ]]; then
-        print_error "Hashcat execution failed or interrupted."
+    elif [[ ${status} -eq 0 || ${status} -eq 1 ]]; then
+        display_cracked_results "${mode}" "${hash_file}" || true
         pause
     else
-        print_success "Hashcat cracking session completed."
+        print_error "Hashcat execution failed (Exit code: ${status})."
         pause
     fi
 }
