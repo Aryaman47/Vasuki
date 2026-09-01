@@ -2,13 +2,21 @@
 
 ## Project Overview
 
-`vash` (**Vasuki Shell**) is a modular, interactive Read-Eval-Print Loop (REPL) reconnaissance console written in Bash. It automates common security tasks around underlying tools (`nmap`, `ffuf`, `curl`) while providing a shell interface featuring:
+`vash` (**Vasuki Shell**) is a modular, interactive Read-Eval-Print Loop (REPL) reconnaissance console written in Bash. It automates common security tasks around underlying tools (`nmap`, `ffuf`, `curl`, `hashcat`) while providing a shell interface featuring:
 
-- **Stateful Target anagement**: Tracks an active target string across tool invocations and exports environment variables (`$TARGET`, `$URL`, `$HOST`, `$IP`).
+- **Stateful Target Management**: Tracks an active target string across tool invocations and exports environment variables (`$TARGET`, `$URL`, `$HOST`, `$IP`).
 - **Dynamic Prompt Formatting**: Displays target status and current working directory in the prompt (e.g. `vash(http://10.10.10.10):~/Projects >`).
 - **Native Linux Passthrough**: Automatically evaluates non-builtin commands in the host environment with target variables bound.
 - **Persistent State Logging**: Retains command history, target history, and user-provided wordlist paths under `~/.config/vasuki/`.
-- **Target-Independent Sub-Module Help**: Displays tool profile references without requiring an active target (`nmap ?`, `ffuf ?`, `curl ?`).
+- **Target-Independent Sub-Module Help**: Displays tool profile references without requiring an active target (`nmap ?`, `ffuf ?`, `curl ?`, `hashcat ?`).
+- **Potfile Auto-Check & Instant Credential Viewing**: Automatically checks Hashcat's `.potfile` before wordlist attacks and provides `hashcat show <file>` for instant cracked hash viewing.
+- **Instant Interrupt Handling**: Traps `SIGINT` (`Ctrl+C`) to reset the prompt instantly with zero delay or blocking.
+
+---
+<p align="center">
+  <img src="assets/images/help.png" alt="Vasuki" height="20%" width="55%" />
+</p>
+<p align="center"> vash (Vasuki Shell)</p>
 
 ---
 
@@ -18,7 +26,7 @@
                        +-----------------------------------+
                        |    vash Launcher (Vasuki)         |
                        |  - Readline Loop (vash_repl)      |
-                       |  - Signal Traps (SIGINT/SIGTERM)  |
+                       |  - Instant SIGINT (Ctrl+C) Handler |
                        +-----------------+-----------------+
                                          |
                                          v
@@ -29,19 +37,20 @@
                        |  - Interactive Wordlist Picker    |
                        +-----------------+-----------------+
                                          |
-         +-------------------------------+-------------------------------+
-         |                               |                               |
-         v                               v                               v
-+------------------+           +-------------------+           +-------------------+
-|   Nmap Module    |           |    FFUF Module    |           |    Curl Module    |
-|   (nmap.sh)      |           |    (ffuf.sh)      |           |    (curl.sh)      |
-+------------------+           +---------+---------+           +-------------------+
-                                         |
-                                         v
-                               +-------------------+
-                               |  SecLists Finder  |
-                               |   (seclists.sh)   |
-                               +-------------------+
+     +-------------------+---------------+---------------+-------------------+
+     |                   |                               |                   |
+     v                   v                               v                   v
++----------+       +-----------+                   +-----------+       +------------+
+| Nmap     |       | FFUF      |                   | Curl      |       | Hashcat    |
+| Module   |       | Module    |                   | Module    |       | Module     |
+|(nmap.sh) |       | (ffuf.sh) |                   | (curl.sh) |       |(hashcat.sh)|
++----------+       +-----+-----+                   +-----------+       +------------+
+                         |
+                         v
+               +-------------------+
+               |  SecLists Finder  |
+               |   (seclists.sh)   |
+               +-------------------+
 ```
 
 ---
@@ -50,14 +59,15 @@
 
 | File | Purpose & Primary Responsibilities |
 | :--- | :--- |
-| `Vasuki` | **Main Entry Point & REPL Launcher**: Initializes signal handlers, executes dependency checks, manages readline command loops, handles target switching, routes built-in commands, and passes unhandled commands to host shell. |
+| `Vasuki` | **Main Entry Point & REPL Launcher**: Initializes signal handlers (`SIGTERM` & instant `SIGINT`), executes dependency checks, manages readline command loops, handles target switching, routes built-in commands, and passes unhandled commands to host shell. |
 | `config.sh` | **Central Configuration Store**: Defines program constants (`PROGRAM_NAME`, `SHELL_NAME`, `VERSION`), persistent directory paths (`VASUKI_CONFIG_DIR`, `TARGET_HISTORY_FILE`, `COMMAND_HISTORY_FILE`, `SAVED_WORDLISTS_FILE`), and ANSI color tokens. |
 | `common.sh` | **Core Helper Library**: Contains UI formatting functions (`banner`, `menu_header`), input validation/normalization routines (`validate_target`, `normalize_target`), target environment exporter (`export_target_environment`), persistent logging logic, and the interactive wordlist selector (`select_wordlist`). |
 | `nmap.sh` | **Nmap Module**: Exposes `run_nmap()`. Extracts clean hostnames/IPs from target URLs, handles direct profile arguments (e.g. `nmap 1`), renders categorized scan profiles (Basic, Moderate, Advanced), and executes `nmap ?` help reference without target prerequisites. |
 | `ffuf.sh` | **FFUF Module**: Exposes `run_ffuf()`. Constructs `/FUZZ` URLs, coordinates with `common.sh` and `seclists.sh` for wordlist resolution, supports direct wordlist file paths, and executes `ffuf ?` help reference. |
 | `curl.sh` | **Curl Module**: Exposes `run_curl()`. Renders request options (GET, `-i`, `-I`, `-v`), supports direct flags/arguments (e.g. `curl -i`), and executes `curl ?` help reference. |
+| `hashcat.sh` | **Hashcat Module**: Exposes `run_hashcat()`. Renders 12 categorized attack profiles (MD5, SHA1, SHA256, SHA512, NTLM, Linux SHA512-Crypt, bcrypt, WPA/WPA2, Kerberos 5 krb5tgs, ZIP, RAR5, PDF), handles direct profile shortcuts (`hashcat hashes.txt 1`), auto-checks `.potfile`, and supports `hashcat show <file>` for instant credential viewing. |
 | `seclists.sh` | **SecLists Discovery Utility**: Standalone and imported helper. Scans system paths for SecLists Web-Content wordlists (`/usr/share/wordlists/seclists/...`), renders indexed pickers, and returns absolute wordlist paths. |
-| `install.sh` | **Installer Script**: Validates system dependencies (`nmap`, `ffuf`, `curl`), initializes configuration directory structure under `~/.config/vasuki/`, copies project files to binary share paths (`/usr/local/share/vasuki` or `~/.local/share/vasuki`), and configures executable symlinks (`vash` & `vasuki`). |
+| `install.sh` | **Installer Script**: Validates system dependencies (`nmap`, `ffuf`, `curl`, `hashcat`), initializes configuration directory structure under `~/.config/vasuki/`, copies project files to binary share paths (`/usr/local/share/vasuki` or `~/.local/share/vasuki`), and configures executable symlinks (`vash` & `vasuki`). |
 | `uninstall.sh` | **Uninstaller Script**: Removes installed binary symlinks (`vash` & `vasuki`) and shared program directories while preserving user data under `~/.config/vasuki/`. |
 
 ---
@@ -76,28 +86,15 @@ Targets passed to `vash` (e.g. `example.com`, `10.10.10.10`, `https://example.co
   - `HOST`: Extracted hostname/IP (e.g. `example.com`)
   - `IP`: Alias of `$HOST`
 
-  ---
-  ![Vasuki set target](assets/images/setTarget.png)
-  ---
-  ## Command Reference Table
+---
 
-  | Command | Arguments | Description |
-  | :--- | :--- | :--- |
-  | `target` | `<URL\|IP>` or `<num>` | Sets target explicitly, or selects item `<num>` from target history log. |
-  | `targets` | *None* | Displays numbered log of previously set targets. |
-  | `show` | `target` \| `options` | Displays active target variables (`$TARGET`, `$HOST`, `$URL`, `$IP`, `$PWD`) or main module options. |
-  | `nmap` | `[1-11]` \| `?` | Opens Nmap profiles menu, executes profile `[1-11]` directly, or displays profile help (`nmap ?`). |
-  | `ffuf` | `[wordlist_path]` \| `?` | Opens Wordlist picker, executes fuzzing with specified file path, or displays FFUF help (`ffuf ?`). |
-  | `curl` | `[1-4]` \| `[flags]` \| `?` | Opens Curl menu, executes specific request profile, or displays Curl help (`curl ?`). |
-  | `cd` | `[dir]` | Changes working directory in-process and updates prompt path representation (`~`). |
-  | `history` | `[commands\|targets]` | Displays command history log or target history log. |
-  | `clear` / `cls` | *None* | Clears terminal screen and re-renders vash header. |
-  | `help` / `?` | *None* | Renders built-in command reference table. |
-  | `exit` / `quit` | *None* | Terminates vash interactive shell session. |
+<p align="center">
+  <img src="assets/images/setTarget.png" alt="Vasuki Target Setting" width="55%" />
+</p>
+<p align="center">Target Setting</p>
 
-  ---
-  ![Vasuki Help Menu](assets/images/help.png)
-  ---
+---
+
 ### 2. Module Specifications
 
 #### Nmap Module (`nmap.sh`)
@@ -118,21 +115,165 @@ Executes scan profiles against `$HOST`. Profiles are categorized into three inte
   10. UDP Top Ports Scan (`nmap -sU --top-ports 100 <target>`)
   11. Vulnerability Assessment (`nmap --script vuln <target>`)
 
-  ---
-  ![Vasuki nmap](assets/images/nmap.png)
-  ---
+##### Nmap Contextual Help Output (`nmap ?`):
+```text
+=== Nmap Module Scan Profiles Reference ===
+
+[ Basic Scans ]
+  1. Fast Scan
+     nmap -F <target>
+  2. Ping Discovery (No Port Scan)
+     nmap -sn <target>
+  3. Default Top 1000 Ports
+     nmap <target>
+
+[ Moderate Scans ]
+  4. Service Version Detection
+     nmap -sV <target>
+  5. Default Scripts & Version Detection
+     nmap -sC -sV <target>
+  6. OS & Version Detection
+     nmap -O -sV <target>
+  7. SYN Stealth Scan + Service Detection
+     nmap -sS -sV <target>
+
+[ Advanced Scans ]
+  8. Aggressive Scan (OS, Version, Scripts, Traceroute)
+     nmap -A <target>
+  9. Full All Ports Scan (1-65535)
+     nmap -p- -sC -sV <target>
+ 10. UDP Top 100 Ports Scan
+     nmap -sU --top-ports 100 <target>
+ 11. Vulnerability Assessment Scan
+     nmap --script vuln <target>
+
+Usage: nmap [profile_num|scan_type]
+Examples: 'nmap 1' (Fast Scan) | 'nmap 8' (Aggressive Scan) | 'nmap' (Interactive Menu)
+```
+
+---
+<p align="center">
+  <img src="assets/images/nmapQuick.png" alt="Vasuki Nmap Scan" width="55%" />
+</p>
+<p align="center">Nmap Scan</p>
+
+---
 
 #### FFUF Module (`ffuf.sh`)
 - Appends `/FUZZ` to the active URL if no `FUZZ` placeholder is present.
 - Resolves wordlists via `select_wordlist()`, direct argument pathing (`ffuf /path/to/wordlist.txt`), or system SecLists discovery.
 - Appends verified user paths to `~/.config/vasuki/saved_wordlists.txt` for future quick selection.
 
-  ---
-  ![Vasuki ffuf](assets/images/ffuf.png)
-  ---
+##### FFUF Contextual Help Output (`ffuf ?`):
+```text
+=== FFUF Fuzzing Module Reference ===
+
+  - Fuzzes web directories and files by replacing the 'FUZZ' keyword.
+  - Automatically appends '/FUZZ' if no FUZZ keyword is present in target.
+  - Automatically logs user-provided wordlist paths to history.
+
+Target URL Format: ffuf -u <target_url>/FUZZ -w <wordlist>
+
+Usage: ffuf [wordlist_path]
+Examples:
+  - ffuf                           : Open interactive wordlist selector
+  - ffuf /usr/share/wordlists/...  : Run fuzzing using specific wordlist file
+```
+
+---
 
 #### Curl Module (`curl.sh`)
 Renders interactive HTTP request options (`GET`, `-i` Include Headers, `-I` HEAD, `-v` Verbose) or passes custom curl arguments directly (`curl -i`).
+
+##### Curl Contextual Help Output (`curl ?`):
+```text
+=== Curl Toolkit Module Reference ===
+
+  1. GET Request              : curl <target_url>
+  2. Include Headers          : curl -i <target_url>
+  3. HEAD Request (Headers)   : curl -I <target_url>
+  4. Verbose Request          : curl -v <target_url>
+
+Usage: curl [option_num|flags]
+Examples: 'curl 2' or 'curl -i' (Include Headers) | 'curl' (Interactive Menu)
+```
+
+---
+
+#### Hashcat Module (`hashcat.sh`)
+Supports 12 categorized attack profiles mapping to specific Hashcat modes (`-m`):
+- **Web & Standard Hashes**:
+  1. MD5 (`-m 0`)
+  2. SHA1 (`-m 100`)
+  3. SHA256 (`-m 1400`)
+  4. SHA512 (`-m 1700`)
+- **OS & System Credentials**:
+  5. NTLM / Windows SAM (`-m 1000`)
+  6. Linux SHA512-Crypt `$6$` (`-m 1800`)
+  7. bcrypt `$2a$` / `$2b$` (`-m 3200`)
+- **Network & Domain Authentication**:
+  8. WPA/WPA2 PMKID / EAPOL (`-m 22000`)
+  9. Kerberos 5 TGS-REP `krb5tgs` (`-m 13100`)
+- **Encrypted Archives & Documents**:
+  10. ZIP / PKZIP (`-m 13600`)
+  11. RAR5 (`-m 13000`)
+  12. PDF 1.4 - 1.6 (`-m 10500`)
+
+**Key Capabilities**:
+- **Potfile Auto-Check**: `display_cracked_results()` checks Hashcat's `.potfile` before launching GPU sessions, instantly rendering cracked credentials if found.
+- **Instant `show` Sub-Command**: Supports `hashcat show <file>` or `hashcat <file> show` to display cracked hashes without running a dictionary attack.
+- **Exit Status Handling**: Correctly distinguishes Exit Code 0 (Success/All Cracked), Exit Code 1 (Wordlist Exhausted / Search Finished), and Exit Code 130 (`Ctrl+C` Interrupt).
+
+##### Hashcat Contextual Help Output (`hashcat ?`):
+```text
+=== Hashcat Module Attack Profiles Reference ===
+
+[ Web & Standard Hashes ]
+  1. MD5
+     hashcat -a 0 -m 0 <hash_file> <wordlist>
+  2. SHA1
+     hashcat -a 0 -m 100 <hash_file> <wordlist>
+  3. SHA256
+     hashcat -a 0 -m 1400 <hash_file> <wordlist>
+  4. SHA512
+     hashcat -a 0 -m 1700 <hash_file> <wordlist>
+
+[ OS & System Credentials ]
+  5. NTLM (Windows SAM / Active Directory)
+     hashcat -a 0 -m 1000 <hash_file> <wordlist>
+  6. Linux SHA512-Crypt ($6$)
+     hashcat -a 0 -m 1800 <hash_file> <wordlist>
+  7. bcrypt ($2a$ / $2b$)
+     hashcat -a 0 -m 3200 <hash_file> <wordlist>
+
+[ Network & Domain Authentication ]
+  8. WPA/WPA2 PMKID / EAPOL
+     hashcat -a 0 -m 22000 <hash_file> <wordlist>
+  9. Kerberos 5 TGS-REP (Kerberoasting - krb5tgs)
+     hashcat -a 0 -m 13100 <hash_file> <wordlist>
+
+[ Encrypted Archives & Documents ]
+ 10. ZIP / PKZIP
+     hashcat -a 0 -m 13600 <hash_file> <wordlist>
+ 11. RAR5
+     hashcat -a 0 -m 13000 <hash_file> <wordlist>
+ 12. PDF 1.4 - 1.6 (Acrobat 5 - 8)
+     hashcat -a 0 -m 10500 <hash_file> <wordlist>
+
+Usage: hashcat [profile_num|hash_file] [profile_num|show] [wordlist_path]
+Examples:
+  - hashcat show hashes.txt                        : Instantly display previously cracked hashes
+  - hashcat hashes.txt 1                          : Crack hashes.txt using Profile 1 (MD5) & Wordlist picker
+  - hashcat hashes.txt 5 /usr/share/wordlists/... : Crack hashes.txt using Profile 5 (NTLM) & specified wordlist
+  - hashcat 1 hashes.txt                          : Crack hashes.txt using Profile 1 (MD5)
+  - hashcat                                   : Open interactive profile & file wizard
+```
+
+---
+<p align="center">
+  <img src="assets/images/hashcatCrack.png" alt="Vasuki Hashcat Cracking Session" width="55%" />
+</p>
+<p align="center">Hashcat cracking session</p>
 
 ---
 
@@ -148,179 +289,48 @@ All persistent state is stored in standard user configuration paths under `~/.co
 ```
 
 ---
-## Comprehensive Source Code Analysis & Logic Explanation
 
-This section provides a granular, line-by-line and logic-block breakdown of every Bash script in the Vasuki (`vash`) repository.
+## Command Reference Table
 
----
+| Command | Arguments | Description |
+| :--- | :--- | :--- |
+| `target` | `<URL\|IP>` or `<num>` | Sets target explicitly, or selects item `<num>` from target history log. |
+| `targets` | *None* | Displays numbered log of previously set targets. |
+| `show` | `target` \| `options` | Displays active target variables (`$TARGET`, `$HOST`, `$URL`, `$IP`, `$PWD`) or main module options. |
+| `nmap` | `[1-11]` \| `?` | Opens Nmap profiles menu, executes profile `[1-11]` directly, or displays profile help (`nmap ?`). |
+| `ffuf` | `[wordlist_path]` \| `?` | Opens Wordlist picker, executes fuzzing with specified file path, or displays FFUF help (`ffuf ?`). |
+| `curl` | `[1-4]` \| `[flags]` \| `?` | Opens Curl menu, executes specific request profile, or displays Curl help (`curl ?`). |
+| `hashcat` | `[file] [1-12]` \| `?` | Opens Hashcat wizard, executes profile `[1-12]` directly, or displays Hashcat help (`hashcat ?`). |
+| `hashcat show` | `<file>` | Instantly displays previously cracked credentials from potfile for specified hash file. |
+| `cd` | `[dir]` | Changes working directory in-process and updates prompt path representation (`~`). |
+| `history` | `[commands\|targets]` | Displays command history log or target history log. |
+| `clear` / `cls` | *None* | Clears terminal screen and re-renders vash header. |
+| `help` / `?` | *None* | Renders built-in command reference table. |
+| `exit` / `quit` | *None* | Terminates vash interactive shell session. |
 
-### 1. `Vasuki` (Main REPL Entry Point)
+##### Built-in Main Help Table Output (`help` / `?`):
+```text
+=== vash (Vasuki Shell) Built-in Commands ===
+  target <URL|IP>           Set or change the active target
+  target <num>              Select target by number from history log
+  targets                   Display target history log
+  show target               Display current target & environment variables
+  nmap [profile_num]        Run Nmap scanner module or specific profile
+  nmap ?                    Display Nmap scan profiles reference
+  ffuf [wordlist_path]      Run FFUF fuzzing module or specific wordlist
+  ffuf ?                    Display FFUF fuzzing module reference
+  curl [option_num]         Run Curl toolkit module or specific request
+  curl ?                    Display Curl toolkit module reference
+  hashcat [file] [prof]     Run Hashcat offline password cracking module
+  hashcat ?                 Display Hashcat attack profiles reference
+  cd [dir]                  Change working directory
+  history [commands|targets] Display command or target history
+  clear / cls               Clear terminal screen and re-render header
+  help / ?                  Display this command reference table
+  exit / quit / back        Exit vash interactive shell
 
-#### Core Role & Initialization
-The `Vasuki` script serves as the primary launcher and interactive REPL engine for `vash`. It initializes shell behavior, sources dependency modules, sets up signal traps, and maintains the primary command loop.
-
-#### Key Logic Components
-
-##### A. Interpreter & Execution Flags
-- `#!/usr/bin/env bash`: Ensures portability across Linux environments.
-- `set -Eeuo pipefail`: Configures strict mode during initialization (trap inherited, exit on error, fail on pipeline errors). Note that `set +e` is toggled inside `vash_repl()` so interactive errors do not terminate the shell.
-
-##### B. Symlink & Directory Resolution
-- `SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"`: Resolves the absolute physical path of the script directory even when invoked via symlink (`vash` or `vasuki` in `/usr/local/bin` or `~/.local/bin`).
-
-##### C. Signal Handling (`trap`)
-- `trap cleanup SIGTERM`: Gracefully exits the shell on termination signals.
-- `trap trap_sigint SIGINT`: Intercepts `Ctrl+C` (`SIGINT`) to print `[!] Interrupted. Returning to vash prompt...` without exiting the shell process.
-
-##### D. Target Setting (`set_target_interactive` & `prompt_target_input`)
-- `set_target_interactive()`: Validates target string or index number. If a number is passed (e.g. `target 1`), it retrieves line `N` from `~/.config/vasuki/target_history.txt`. On valid targets, it normalizes the URL, calls `export_target_environment()`, and logs to target history.
-- `prompt_target_input()`: Interactively prompts for a target if non-target mode is initialized.
-
-##### E. REPL Core (`vash_repl`)
-- Initializes Readline history with `history -r "${COMMAND_HISTORY_FILE}"`.
-- Dynamically renders prompt: `vash(${CURRENT_TARGET}):${PWD} > ` (with `~` path substitution via `get_prompt_pwd()`).
-- Parses input line into `cmd` and `args`.
-- Appends command input to `COMMAND_HISTORY_FILE` and Readline buffer (`history -s`).
-- Dispatches built-in commands (`target`, `targets`, `show`, `nmap`, `ffuf`, `curl`, `cd`, `history`, `clear`, `help`, `exit`).
-- **Native Command Passthrough**: Unhandled commands are evaluated using `eval "${input_line}"` with `$TARGET`, `$URL`, `$HOST`, `$IP` exported to the execution environment.
-
----
-
-### 2. `config.sh` (Central Configuration Store)
-
-#### Core Role
-`config.sh` centralizes global constants, file paths, default protocols, and ANSI color tokens used across all modules.
-
-#### Key Variables Defined
-- `PROGRAM_NAME="Vasuki"`, `SHELL_NAME="vash"`, `VERSION="2.0.0"`: Versioning and program branding metadata.
-- `VASUKI_CONFIG_DIR="${HOME}/.config/vasuki"`: User-level configuration directory.
-- `SAVED_WORDLISTS_FILE`: `${VASUKI_CONFIG_DIR}/saved_wordlists.txt`
-- `TARGET_HISTORY_FILE`: `${VASUKI_CONFIG_DIR}/target_history.txt`
-- `COMMAND_HISTORY_FILE`: `${VASUKI_CONFIG_DIR}/command_history.txt`
-- `DEFAULT_PROTOCOL="http"`: Default scheme applied during target normalization.
-- `COLOR_*`: ANSI color code constants (`COLOR_RED`, `COLOR_GREEN`, `COLOR_YELLOW`, `COLOR_BLUE`, `COLOR_CYAN`, `COLOR_BOLD`, `COLOR_RESET`) toggled based on `COLOR_ENABLED`.
-
----
-
-### 3. `common.sh` (Shared Helper Library & Utilities)
-
-#### Core Role
-`common.sh` provides shared utility functions for UI rendering, target validation, target normalization, environment variable exporting, persistent logging, and interactive wordlist selection.
-
-#### Key Functions Breakdown
-
-##### A. Visual & UI Helpers
-- `banner()`: Prints ASCII art logo, version number, and quick start guidance.
-- `pause()`: Suspends execution until the user presses Enter.
-- `print_error()`, `print_success()`, `print_warning()`, `print_info()`: Standardized color-coded logging routines.
-- `menu_header()`: Clears screen and displays standard current target & working directory banner.
-
-##### B. Target Normalization & Environment Binding
-- `validate_target()`: Validates input string against IP/hostname/URL regex format.
-- `normalize_target()`: Strips trailing slashes and prepends `http://` if no protocol scheme is specified.
-- `extract_host()`: Strips protocol scheme, port numbers, and URL paths to isolate pure hostname/IP.
-- `export_target_environment()`: Populates environment variables `$TARGET`, `$URL`, `$HOST`, and `$IP` for host command passthrough.
-
-##### C. History Management
-- `save_target_history()`: Appends unique target strings to `target_history.txt`.
-- `show_target_history()`: Displays numbered log of previously targeted hosts/URLs.
-- `show_command_history()`: Displays the last 25 commands from `command_history.txt`.
-- `show_help()`: Renders full reference table of `vash` built-in commands.
-
-##### D. Interactive Wordlist Selector (`select_wordlist`)
-- Reads persistent user wordlist paths from `saved_wordlists.txt`.
-- Renders numbered selection menu combining saved paths, option for new path input, option for SecLists browsing, and `0` / `back` navigation.
-- **Smart Direct Path Detection**: Auto-detects if a user pastes/types a file path directly at the choice prompt (`/usr/share/...` or `~/...`).
-- **Directory Validation**: Explicitly catches directory inputs (e.g. `/usr/share/wordlists`) and warns the user instead of failing silently.
-- **Dedicated Path Retry Loop**: Retains path entry prompt on input errors so users can fix typos without returning to option selection.
-
----
-
-### 4. `nmap.sh` (Nmap Enumeration Module)
-
-#### Core Role
-Provides Nmap service scanning capabilities organized into 3 scan intensity levels, supporting interactive menus, direct profile argument execution, and target-independent help.
-
-#### Key Functions & Logic
-
-##### A. Target-Independent Help (`show_nmap_help`)
-- Renders categorized scan profiles (Basic 1–3, Moderate 4–7, Advanced 8–11) along with scan titles and exact `nmap` commands.
-- Operates without requiring an active target when called via `nmap ?` or `nmap help`.
-
-##### B. Scan Execution (`run_nmap`)
-- Extracts clean host/IP via `_extract_nmap_target()`.
-- Supports direct profile numbers (e.g. `nmap 1` -> `nmap -F <host>`).
-- Executes selected `nmap` scan command and handles return status gracefully.
-
----
-
-### 5. `ffuf.sh` (FFUF Directory & File Fuzzing Module)
-
-#### Core Role
-Manages web directory and file fuzzing using `ffuf`.
-
-#### Key Functions & Logic
-
-##### A. URL Construction (`_prepare_ffuf_url`)
-- Checks if the active target URL contains the `FUZZ` placeholder.
-- If missing, automatically appends `/FUZZ` (e.g. `http://10.10.10.10/admin` -> `http://10.10.10.10/admin/FUZZ`).
-
-##### B. Execution & Wordlist Binding (`run_ffuf`)
-- Supports direct wordlist arguments (`ffuf /path/to/dict.txt`) or interactive wordlist selection (`select_wordlist`).
-- Logs new valid wordlist paths to `saved_wordlists.txt`.
-- Supports target-independent help (`ffuf ?`).
-
----
-
-### 6. `curl.sh` (Curl HTTP Toolkit Module)
-
-#### Core Role
-Executes common HTTP requests against the active target URL.
-
-#### Key Functions & Logic
-- Renders request profiles:
-  1. GET (`curl <target>`)
-  2. Include Headers (`curl -i <target>`)
-  3. HEAD Request (`curl -I <target>`)
-  4. Verbose Request (`curl -v <target>`)
-- Supports direct option selection (`curl 2` or `curl -i`) and custom flags.
-- Supports target-independent help (`curl ?`).
-
----
-
-### 7. `seclists.sh` (SecLists Discovery Utility)
-
-#### Core Role
-Locates and indexes SecLists Web-Content wordlists on Linux/Kali systems.
-
-#### Key Functions & Logic
-- `locate_seclists_dir()`: Checks standard system locations (`/usr/share/wordlists/seclists/Discovery/Web-Content`, `/usr/share/seclists/...`, `/opt/seclists/...`).
-- `select_seclist_wordlist()`: Recursively scans for `.txt` and `.lst` files using `find`, displays a numbered list of relative paths, and returns the selected absolute path.
-
----
-
-### 8. `install.sh` (System Installation & Symlink Provisioner)
-
-#### Core Role
-Deploys Vasuki/vash onto the system environment.
-
-#### Key Actions
-1. Verifies binary dependencies (`nmap`, `ffuf`, `curl`).
-2. Creates persistent configuration folder `~/.config/vasuki/` and initializes state tracking files.
-3. Copies project files to `/usr/local/share/vasuki` (root) or `~/.local/share/vasuki` (user).
-4. Grants executable permissions (`chmod +x`).
-5. Configures executable symlinks in `/usr/local/bin` or `~/.local/bin`:
-   - `vash` -> `${SHARE_DIR}/Vasuki`
-   - `vasuki` -> `${SHARE_DIR}/Vasuki`
-
----
-
-### 9. `uninstall.sh` (Uninstallation Cleanup Script)
-
-#### Core Role
-Removes Vasuki/vash from the system environment.
-
-#### Key Actions
-1. Removes executable symlinks (`vash` and `vasuki`) from binary path.
-2. Removes shared program directory (`/usr/local/share/vasuki` or `~/.local/share/vasuki`).
-3. Preserves user configuration data in `~/.config/vasuki/` to prevent history loss.
+Linux Command Passthrough:
+  Any command not listed above is executed directly as a Linux shell command.
+  Environment variables available: $TARGET, $URL, $HOST, $IP
+  Examples: ping -c 4 $HOST | whois $HOST | nikto -h $URL
+```
